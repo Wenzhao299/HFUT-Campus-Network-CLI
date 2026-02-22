@@ -1,0 +1,221 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+GATEWAYS=(
+  "http://172.16.200.11"
+  "http://172.16.200.12"
+  "http://192.168.4.1"
+)
+LEGACY_PORTAL="http://210.45.240.245"
+EPORTAL_HOST="http://210.45.240.105:801"
+
+need_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "missing dependency: $1"
+    exit 1
+  fi
+}
+
+campus_curl() {
+  curl --noproxy '*' "$@" 2>/dev/null
+}
+
+usage() {
+  echo "usage: online <username> <password>"
+}
+
+url_encode() {
+  local raw="$1"
+  local out=""
+  local i ch hex
+  for ((i = 0; i < ${#raw}; i++)); do
+    ch="${raw:i:1}"
+    case "$ch" in
+      [a-zA-Z0-9.~_-]) out+="$ch" ;;
+      *)
+        printf -v hex '%%%02X' "'$ch"
+        out+="$hex"
+        ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+check_internet() {
+  local probe code effective
+
+  # Force IPv4 and keep probe time short to avoid long waits before login fallback.
+  probe="$(campus_curl -4 -L --connect-timeout 2 -sS -m 4 -o /dev/null -w '%{http_code} %{url_effective}' http://connect.rom.miui.com/generate_204 || true)"
+  code="${probe%% *}"
+  effective="${probe#* }"
+  if [[ "$code" == "204" && "$effective" != *"172.16.200."* && "$effective" != *"192.168.4.1"* && "$effective" != *"210.45.240."* && "$effective" != *"eportal"* ]]; then
+    return 0
+  fi
+
+  probe="$(campus_curl -4 -L --connect-timeout 2 -sS -m 4 -o /dev/null -w '%{http_code} %{url_effective}' http://connectivitycheck.gstatic.com/generate_204 || true)"
+  code="${probe%% *}"
+  effective="${probe#* }"
+  if [[ "$code" == "204" && "$effective" != *"172.16.200."* && "$effective" != *"192.168.4.1"* && "$effective" != *"210.45.240."* && "$effective" != *"eportal"* ]]; then
+    return 0
+  fi
+
+  probe="$(campus_curl -4 -L --connect-timeout 2 -sS -m 4 -o /dev/null -w '%{http_code} %{url_effective}' http://www.baidu.com || true)"
+  code="${probe%% *}"
+  effective="${probe#* }"
+  if [[ "$code" =~ ^(200|301|302)$ && "$effective" != *"172.16.200."* && "$effective" != *"192.168.4.1"* && "$effective" != *"210.45.240."* && "$effective" != *"eportal"* ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
+detect_gateway_page() {
+  local content=""
+  content="$(campus_curl -sS --connect-timeout 2 -m 5 "${GATEWAYS[0]}" || true)"
+  printf '%s' "$content"
+}
+
+login_legacy_redirect() {
+  local username="$1"
+  local password="$2"
+  local content redirect cookie response
+
+  content="$(detect_gateway_page)"
+  if [[ -z "$content" ]]; then
+    return 1
+  fi
+
+  if [[ "$content" != *"FC_XueShengSuSh"* && "$content" != *"FCH-HJ_bkl-RG18"* ]]; then
+    return 1
+  fi
+
+  redirect="$(echo "$content" | sed -n -E "s/.*'(http[^']+)'.*/\1/p" | head -n 1)"
+  cookie=""
+  if [[ -n "$redirect" ]]; then
+    cookie="$(campus_curl -I -sS --connect-timeout 2 -m 5 "$redirect" | sed -n -E 's/[Ss]et-[Cc]ookie: ([^;]+;).*/\1/p' | head -n 1 || true)"
+  fi
+
+  if [[ -n "$cookie" ]]; then
+    response="$(campus_curl -sS --connect-timeout 2 -m 6 -b "$cookie" \
+      -d "username=${username}&password=${password}&0MKKey=%B5%C7+%C2%BC&savePWD=0" \
+      "${LEGACY_PORTAL}/post.php" || true)"
+  else
+    response="$(campus_curl -sS --connect-timeout 2 -m 6 \
+      -d "username=${username}&password=${password}&0MKKey=%B5%C7+%C2%BC&savePWD=0" \
+      "${LEGACY_PORTAL}/post.php" || true)"
+  fi
+
+  [[ -n "$response" ]]
+}
+
+get_local_ip() {
+  local ip
+  ip="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n -E 's/.* src ([0-9.]+).*/\1/p' | head -n 1 || true)"
+  if [[ -z "$ip" ]]; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  fi
+  printf '%s' "$ip"
+}
+
+login_eportal() {
+  local username="$1"
+  local password="$2"
+  local content redirect parameter ip response
+  local enc_user enc_pass
+
+  content="$(detect_gateway_page)"
+  if [[ -z "$content" ]]; then
+    return 1
+  fi
+
+  if [[ "$content" != *"HFUT-WiFi"* && "$content" != *"<NextURL>"* ]]; then
+    return 1
+  fi
+
+  redirect="$(echo "$content" | sed -n -E "s/.*<NextURL>(.*)<\/NextURL>.*/\1/p" | head -n 1)"
+  parameter=""
+  if [[ -n "$redirect" ]]; then
+    parameter="$(echo "$redirect" | sed -n -E 's/.*\?(.*)/\1/p' | sed -E 's/(wlan|user|ac|nas)/\1_/g')"
+  fi
+
+  if [[ -z "$parameter" ]]; then
+    ip="$(get_local_ip)"
+    if [[ -z "$ip" ]]; then
+      return 1
+    fi
+    parameter="wlan_user_ip=${ip}&wlan_user_ipv6=&wlan_user_mac=000000000000&wlan_ac_ip=&wlan_ac_name="
+  fi
+
+  campus_curl -sS --connect-timeout 2 -m 5 "${EPORTAL_HOST}/eportal/?c=Portal&a=page_type_data" >/dev/null || true
+  enc_user="$(url_encode "$username")"
+  enc_pass="$(url_encode "$password")"
+  response="$(campus_curl -sS --connect-timeout 2 -m 6 \
+    "${EPORTAL_HOST}/eportal/?c=Portal&a=login&callback=dr1003&login_method=1&user_account=${enc_user}&user_password=${enc_pass}&${parameter}" || true)"
+  [[ -n "$response" ]]
+}
+
+login_drcom_direct() {
+  local username="$1"
+  local password="$2"
+  local gateway response
+
+  for gateway in "${GATEWAYS[@]}"; do
+    response="$(campus_curl -sS --connect-timeout 2 -m 6 \
+      --data-urlencode "DDDDD=${username}" \
+      --data-urlencode "upass=${password}" \
+      --data "0MKKey=123456&R1=0&R2=&R3=0&R6=0&para=00&v6ip=&terminal_type=1&lang=zh-cn" \
+      "${gateway}" || true)"
+    if [[ -n "$response" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+main() {
+  need_cmd curl
+  need_cmd sed
+  need_cmd ip
+
+  if [[ $# -ne 2 ]]; then
+    usage
+    exit 1
+  fi
+
+  local username="$1"
+  local password="$2"
+  local attempted=0
+
+  if login_drcom_direct "$username" "$password"; then
+    attempted=1
+  fi
+  if check_internet; then
+    echo "online: login success (drcom direct)"
+    exit 0
+  fi
+
+  if login_legacy_redirect "$username" "$password"; then
+    attempted=1
+  fi
+  if check_internet; then
+    echo "online: login success (legacy portal)"
+    exit 0
+  fi
+
+  if login_eportal "$username" "$password"; then
+    attempted=1
+  fi
+  if check_internet; then
+    echo "online: login success (eportal)"
+    exit 0
+  fi
+
+  if [[ "$attempted" -eq 1 ]]; then
+    echo "login request sent, but internet check failed"
+  else
+    echo "no reachable auth page from campus gateway"
+  fi
+  exit 1
+}
+
+main "$@"
