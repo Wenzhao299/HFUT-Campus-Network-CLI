@@ -4,8 +4,16 @@
 
 支持在接入校园网后通过命令行完成认证，无需下载客户端。
 
+## 系统兼容性
+
+- Linux：使用 `hfut-net`（Bash 统一入口）。
+- macOS：使用 `hfut-net`（Bash 统一入口，已适配无 `ip` 命令环境）。
+- Windows：使用 `hfut-net.ps1`（PowerShell 统一入口）。
+
 ## 功能
 
+- `hfut-net login <username> <password>`：统一登录入口（推荐）。
+- `hfut-net logout`：统一注销入口（推荐）。
 - `online <username> <password>`：登录校园网。
 - `offline`：注销校园网。
 - 自动兼容多个认证入口：`172.16.200.11`、`172.16.200.12`、`192.168.4.1`。
@@ -15,62 +23,100 @@
 
 ## 文件说明
 
+- `hfut-net`：Linux / macOS 统一入口（Bash）
+- `hfut-net.ps1`：Windows 统一入口（PowerShell）
 - `online`：登录脚本
 - `offline`：注销脚本
+- `online.ps1`：Windows PowerShell 登录脚本
+- `offline.ps1`：Windows PowerShell 注销脚本
 
 ## 依赖
 
-需要系统中可用以下命令：
+Linux / macOS（Bash）需要：
 
 - `bash`
 - `curl`
-- `ip`（`iproute2`）
 - `sed`
 
+说明：`ip`（`iproute2`）不是强制依赖，会自动回退到 `route` / `ipconfig` / `ifconfig`。
+
+Windows（PowerShell）需要：
+
+- `PowerShell 5.1+` 或 `PowerShell 7+`
+- `curl.exe`
+
 ## 快速开始
+
+### Linux / macOS（Bash）
 
 1. 赋予执行权限
 
 ```bash
-chmod +x online offline
+chmod +x hfut-net online offline
 ```
 
 2. 登录
 
 ```bash
-./online 学号 密码
+./hfut-net login 学号 密码
 ```
 
 3. 注销
 
 ```bash
-./offline
+./hfut-net logout
 ```
 
-## 注册为全局命令（软链接）
+### Windows（PowerShell）
 
-将脚本链接到 `/usr/local/bin` 后，可直接使用 `online` / `offline`：
+1. 在仓库目录执行（当前会话临时允许本地脚本）
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+2. 登录
+
+```powershell
+.\hfut-net.ps1 login 学号 密码
+```
+
+3. 注销
+
+```powershell
+.\hfut-net.ps1 logout
+```
+
+## 注册为全局命令（Linux / macOS 软链接）
+
+将统一入口链接到 `/usr/local/bin` 后，可直接使用 `hfut-net`：
 
 ```bash
-sudo ln -sf YOUR_PATH/online /usr/local/bin/online
-sudo ln -sf YOUR_PATH/offline /usr/local/bin/offline
+sudo ln -sf YOUR_PATH/hfut-net /usr/local/bin/hfut-net
 hash -r
 ```
 
 验证：
 
 ```bash
-command -v online offline
+command -v hfut-net
 ```
 
 ## 无 sudo 的用户级安装
 
 ```bash
 mkdir -p ~/.local/bin
-ln -sf YOUR_PATH/online ~/.local/bin/online
-ln -sf YOUR_PATH/offline ~/.local/bin/offline
+ln -sf YOUR_PATH/hfut-net ~/.local/bin/hfut-net
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
+```
+
+## Windows 快捷命令（可选）
+
+将以下函数写入 `$PROFILE` 后，可在 PowerShell 中直接使用 `hfut-net`：
+
+```powershell
+function hfut-net { & "YOUR_PATH\hfut-net.ps1" @args }
 ```
 
 ## 常见输出
