@@ -6,9 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Gateways = @(
-  "http://172.16.200.11"
-  "http://172.16.200.12"
-  "http://192.168.4.1"
+  "http://210.45.240.150/"
 )
 $LegacyPortal = "http://210.45.240.245"
 $EportalHost = "http://210.45.240.105:801"

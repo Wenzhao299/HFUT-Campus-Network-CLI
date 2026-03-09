@@ -2,9 +2,7 @@
 set -uo pipefail
 
 GATEWAYS=(
-  "http://172.16.200.11"
-  "http://172.16.200.12"
-  "http://192.168.4.1"
+  "http://210.45.240.150/"
 )
 LEGACY_PORTAL="http://210.45.240.245"
 EPORTAL_HOST="http://210.45.240.105:801"
@@ -18,6 +16,17 @@ need_cmd() {
 
 campus_curl() {
   curl --noproxy '*' "$@" 2>/dev/null
+}
+
+join_url() {
+  local base="$1"
+  local path="$2"
+  printf '%s/%s' "${base%/}" "${path#/}"
+}
+
+request_status_code() {
+  local url="$1"
+  campus_curl -sS --connect-timeout 2 -m 5 -o /dev/null -w '%{http_code}' "$url" || true
 }
 
 get_local_ip() {
@@ -50,17 +59,19 @@ get_local_ip() {
 }
 
 logout_drcom() {
-  local gateway response
+  local gateway url code
 
   for gateway in "${GATEWAYS[@]}"; do
-    response="$(campus_curl -sS --connect-timeout 2 -m 5 "${gateway}/F.htm" || true)"
-    if [[ -n "$response" ]]; then
+    url="$(join_url "$gateway" "F.htm")"
+    code="$(request_status_code "$url")"
+    if [[ "$code" =~ ^(200|30[12378])$ ]]; then
       return 0
     fi
   done
 
-  response="$(campus_curl -sS --connect-timeout 2 -m 5 "${LEGACY_PORTAL}/F.htm" || true)"
-  if [[ -n "$response" ]]; then
+  url="$(join_url "$LEGACY_PORTAL" "F.htm")"
+  code="$(request_status_code "$url")"
+  if [[ "$code" =~ ^(200|30[12378])$ ]]; then
     return 0
   fi
 

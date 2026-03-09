@@ -3,9 +3,7 @@ param()
 $ErrorActionPreference = "Stop"
 
 $Gateways = @(
-  "http://172.16.200.11"
-  "http://172.16.200.12"
-  "http://192.168.4.1"
+  "http://210.45.240.150/"
 )
 $LegacyPortal = "http://210.45.240.245"
 $EportalHost = "http://210.45.240.105:801"
@@ -29,6 +27,23 @@ function Invoke-CampusCurl {
   } catch {
     return ""
   }
+}
+
+function Join-Url {
+  param(
+    [string]$Base,
+    [string]$Path
+  )
+  return ($Base.TrimEnd("/") + "/" + $Path.TrimStart("/"))
+}
+
+function Get-StatusCode {
+  param([string]$Url)
+  $code = Invoke-CampusCurl @("-sS", "--connect-timeout", "2", "-m", "5", "-o", "NUL", "-w", "%{http_code}", $Url)
+  if ([string]::IsNullOrWhiteSpace($code)) {
+    return ""
+  }
+  return $code.Trim()
 }
 
 function Get-LocalIp {
@@ -67,14 +82,16 @@ function Get-LocalIp {
 
 function Invoke-LogoutDrcom {
   foreach ($gateway in $Gateways) {
-    $response = Invoke-CampusCurl @("-sS", "--connect-timeout", "2", "-m", "5", "$gateway/F.htm")
-    if (-not [string]::IsNullOrWhiteSpace($response)) {
+    $url = Join-Url $gateway "F.htm"
+    $code = Get-StatusCode $url
+    if ($code -match "^(200|30[12378])$") {
       return $true
     }
   }
 
-  $response = Invoke-CampusCurl @("-sS", "--connect-timeout", "2", "-m", "5", "$LegacyPortal/F.htm")
-  return -not [string]::IsNullOrWhiteSpace($response)
+  $url = Join-Url $LegacyPortal "F.htm"
+  $code = Get-StatusCode $url
+  return ($code -match "^(200|30[12378])$")
 }
 
 function Invoke-LogoutEportal {
