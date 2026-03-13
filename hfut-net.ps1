@@ -10,10 +10,12 @@ function Show-Usage {
 usage:
   hfut-net login <username> <password>
   hfut-net logout
+  hfut-net keep-online [username] [password]
 
 aliases:
   hfut-net online <username> <password>
   hfut-net offline
+  hfut-net keepalive [username] [password]
 "@ | Write-Output
 }
 
@@ -60,6 +62,22 @@ switch ($cmd) {
       exit 1
     }
     & "$scriptDir\offline.ps1"
+    exit $LASTEXITCODE
+  }
+  "keep-online" {
+    if ($rest.Count -ne 0 -and $rest.Count -ne 2) {
+      Show-Usage
+      exit 1
+    }
+    & "$scriptDir\keep-online.ps1" @rest
+    exit $LASTEXITCODE
+  }
+  "keepalive" {
+    if ($rest.Count -ne 0 -and $rest.Count -ne 2) {
+      Show-Usage
+      exit 1
+    }
+    & "$scriptDir\keep-online.ps1" @rest
     exit $LASTEXITCODE
   }
   "help" {

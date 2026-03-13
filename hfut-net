@@ -6,10 +6,12 @@ usage() {
 usage:
   hfut-net login <username> <password>
   hfut-net logout
+  hfut-net keep-online [username password]
 
 aliases:
   hfut-net online <username> <password>
   hfut-net offline
+  hfut-net keepalive [username password]
 EOF
 }
 
@@ -40,6 +42,14 @@ run_logout() {
   "${SCRIPT_DIR}/offline"
 }
 
+run_keep_online() {
+  if [[ $# -ne 0 && $# -ne 2 ]]; then
+    usage
+    exit 1
+  fi
+  "${SCRIPT_DIR}/keep-online" "$@"
+}
+
 main() {
   if [[ $# -lt 1 ]]; then
     usage
@@ -55,6 +65,9 @@ main() {
       ;;
     logout | offline)
       run_logout "$@"
+      ;;
+    keep-online | keepalive)
+      run_keep_online "$@"
       ;;
     help | -h | --help)
       usage

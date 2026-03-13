@@ -14,6 +14,7 @@
 
 - `hfut-net login <username> <password>`：统一登录入口（推荐）。
 - `hfut-net logout`：统一注销入口（推荐）。
+- `hfut-net keep-online [username password]`：检查在线状态，掉线自动登录（适合配合定时任务）。
 - `online <username> <password>`：登录校园网。
 - `offline`：注销校园网。
 - 登录认证入口：`http://210.45.240.150/`。
@@ -25,6 +26,8 @@
 
 - `hfut-net`：Linux / macOS 统一入口（Bash）
 - `hfut-net.ps1`：Windows 统一入口（PowerShell）
+- `keep-online`：Linux / macOS 在线巡检脚本
+- `keep-online.ps1`：Windows 在线巡检脚本
 - `online`：登录脚本
 - `offline`：注销脚本
 - `online.ps1`：Windows PowerShell 登录脚本
@@ -52,7 +55,7 @@ Windows（PowerShell）需要：
 1. 赋予执行权限
 
 ```bash
-chmod +x hfut-net online offline
+chmod +x hfut-net keep-online online offline
 ```
 
 2. 登录
@@ -65,6 +68,12 @@ chmod +x hfut-net online offline
 
 ```bash
 ./hfut-net logout
+```
+
+4. 掉线自动补登录（单次检查）
+
+```bash
+./hfut-net keep-online 学号 密码
 ```
 
 ### Windows（PowerShell）
@@ -85,6 +94,12 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ```powershell
 .\hfut-net.ps1 logout
+```
+
+4. 掉线自动补登录（单次检查）
+
+```powershell
+.\hfut-net.ps1 keep-online 学号 密码
 ```
 
 ## 注册为全局命令（Linux / macOS 软链接）
@@ -119,6 +134,27 @@ source ~/.bashrc
 function hfut-net { & "YOUR_PATH\hfut-net.ps1" @args }
 ```
 
+## 每小时自动检查
+
+`keep-online` / `keep-online.ps1` 每次执行只检查一次：已联网则直接退出，掉线则自动调用登录脚本。推荐交给系统定时任务每小时运行一次。
+
+Linux / macOS `cron` 示例：
+
+```bash
+0 * * * * HFUT_NET_USERNAME=你的学号 HFUT_NET_PASSWORD=你的密码 /ABS/PATH/hfut-net keep-online >> "$HOME/.hfut-net-keep-online.log" 2>&1
+```
+
+Windows 任务计划程序可调用：
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File "C:\PATH\hfut-net.ps1" keep-online 学号 密码
+```
+
+说明：`keep-online` 支持两种传参方式。
+
+- 命令参数：`hfut-net keep-online 学号 密码`
+- 环境变量：`HFUT_NET_USERNAME` 和 `HFUT_NET_PASSWORD`
+
 ## 常见输出
 
 - `online: login success (drcom direct)`：登录成功（drcom 流程）。
@@ -129,6 +165,8 @@ function hfut-net { & "YOUR_PATH\hfut-net.ps1" @args }
 - `offline: logout request sent (drcom)`：drcom 注销请求已发送。
 - `offline: logout request sent (eportal)`：eportal 注销请求已发送。
 - `offline: no reachable auth server`：未找到可访问的注销服务。
+- `keep-online: already online`：当前网络已在线，无需补登录。
+- `keep-online: offline detected, trying login`：检测到掉线，正在自动登录。
 
 ## 注意事项
 
